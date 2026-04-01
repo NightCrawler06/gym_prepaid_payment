@@ -20,11 +20,11 @@ The app uses SQLite out of the box, so you can run it immediately without settin
 
 Database file:
 
-`gym_qr_system/data/gym_system.db`
+`data/gym_system.db`
 
 ## Optional MySQL/phpMyAdmin setup
 
-If you want to use a local MySQL database managed through phpMyAdmin, create a `db_config.json` file in the `gym_qr_system` folder:
+If you want to use a local MySQL database managed through phpMyAdmin, create a `db_config.json` file in the project root:
 
 ```json
 {
@@ -48,7 +48,7 @@ The app will create the required tables automatically on startup.
 ## Install
 
 ```powershell
-cd C:\Users\USER\Documents\Playground\gym_qr_system
+cd C:\Users\USER\Documents\Playground
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -57,7 +57,7 @@ pip install -r requirements.txt
 ## Run
 
 ```powershell
-cd C:\Users\USER\Documents\Playground\gym_qr_system
+cd C:\Users\USER\Documents\Playground
 python main.py
 ```
 
