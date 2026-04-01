@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+app/__pycache__/
+data/*.db
+data/qrcodes/*.png
+db_config.json
