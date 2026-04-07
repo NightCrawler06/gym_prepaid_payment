@@ -39,6 +39,8 @@ class MainWindow(QMainWindow):
         self.camera: cv2.VideoCapture | None = None
         self.camera_timer = QTimer(self)
         self.camera_timer.timeout.connect(self.update_camera_frame)
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.refresh_all_data)
         self.last_scanned_token: str | None = None
         self.scan_cooldown_ticks = 0
         self.last_scan_summary = "Scanner ready."
@@ -47,9 +49,8 @@ class MainWindow(QMainWindow):
         self.resize(1380, 860)
         self._build_ui()
         self._apply_styles()
-        self.refresh_dashboard()
-        self.refresh_members_table()
-        self.refresh_logs_table()
+        self.refresh_all_data()
+        self.refresh_timer.start(5000)
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -488,6 +489,11 @@ class MainWindow(QMainWindow):
         self.low_credit_card.value_label.setText(str(stats["low_credit_members"]))
         self._update_clock()
 
+    def refresh_all_data(self) -> None:
+        self.refresh_dashboard()
+        self.refresh_members_table()
+        self.refresh_logs_table()
+
     def register_member(self) -> None:
         full_name = self.name_input.text().strip()
         phone = self.phone_input.text().strip()
@@ -516,8 +522,7 @@ class MainWindow(QMainWindow):
         self.email_input.clear()
         self.initial_credits_input.setValue(5)
 
-        self.refresh_dashboard()
-        self.refresh_members_table()
+        self.refresh_all_data()
         QMessageBox.information(self, "Success", "Member registered and QR generated successfully.")
 
     def _show_qr_preview(self, qr_path: str) -> None:
@@ -571,8 +576,7 @@ class MainWindow(QMainWindow):
 
         amount = int(self.top_up_input.value())
         self.db.add_credits(self.selected_member_id, amount)
-        self.refresh_dashboard()
-        self.refresh_members_table()
+        self.refresh_all_data()
         QMessageBox.information(self, "Success", f"{amount} credit(s) added successfully.")
 
     def start_camera(self) -> None:
@@ -673,15 +677,12 @@ class MainWindow(QMainWindow):
             )
             self.last_scan_summary = f"Unknown QR scanned at {datetime.now().strftime('%I:%M %p')}."
             self.last_scan_label.setText(f"Latest Event: {self.last_scan_summary}")
-            self.refresh_logs_table()
-            self.refresh_dashboard()
+            self.refresh_all_data()
             self._set_result_state("Access denied.\nUnknown member QR.", "#9d0208", "#fff1f1")
             return
 
         success, updated_member, message = self.db.consume_credit_for_check_in(member["id"])
-        self.refresh_dashboard()
-        self.refresh_members_table()
-        self.refresh_logs_table()
+        self.refresh_all_data()
 
         if success and updated_member:
             self.last_scan_summary = (

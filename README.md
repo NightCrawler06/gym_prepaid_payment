@@ -22,7 +22,7 @@ Database file:
 
 `data/gym_system.db`
 
-## Optional MySQL/phpMyAdmin setup
+## Optional XAMPP MySQL setup
 
 If you want to use a local MySQL database managed through phpMyAdmin, create a `db_config.json` file in the project root:
 
@@ -44,6 +44,8 @@ CREATE DATABASE gym_qr_system;
 ```
 
 The app will create the required tables automatically on startup.
+
+For the phone app, use the PHP API in [xampp_api](C:\Users\USER\Documents\Playground\xampp_api) so the mobile app can use the same XAMPP MySQL database.
 
 ## Install
 

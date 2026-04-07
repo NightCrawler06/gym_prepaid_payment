@@ -57,6 +57,7 @@ class Database:
                 qr_token VARCHAR(255) NOT NULL UNIQUE,
                 qr_image_path TEXT NOT NULL,
                 credits INTEGER NOT NULL DEFAULT 0,
+                last_paid_scan_date VARCHAR(10),
                 created_at VARCHAR(50) NOT NULL
             )
             """
@@ -83,6 +84,7 @@ class Database:
                 qr_token VARCHAR(255) NOT NULL UNIQUE,
                 qr_image_path TEXT NOT NULL,
                 credits INTEGER NOT NULL DEFAULT 0,
+                last_paid_scan_date VARCHAR(10),
                 created_at VARCHAR(50) NOT NULL
             )
             """
@@ -104,6 +106,19 @@ class Database:
             cursor = connection.cursor()
             cursor.execute(members_sql)
             cursor.execute(attendance_sql)
+            self._ensure_members_columns(cursor)
+
+    def _ensure_members_columns(self, cursor) -> None:
+        if self.engine == "mysql":
+            cursor.execute("SHOW COLUMNS FROM members LIKE 'last_paid_scan_date'")
+            has_column = cursor.fetchone() is not None
+            if not has_column:
+                cursor.execute("ALTER TABLE members ADD COLUMN last_paid_scan_date VARCHAR(10) NULL")
+        else:
+            cursor.execute("PRAGMA table_info(members)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "last_paid_scan_date" not in columns:
+                cursor.execute("ALTER TABLE members ADD COLUMN last_paid_scan_date VARCHAR(10)")
 
     def create_member(
         self,
@@ -238,53 +253,102 @@ class Database:
             cursor.execute(sql, params)
 
     def consume_credit_for_check_in(self, member_id: int) -> tuple[bool, dict | None, str]:
+        today = datetime.now().strftime("%Y-%m-%d")
         member = self.get_member_by_id(member_id)
         if not member:
             return False, None, "Member not found."
 
-        existing_check_in = self.get_today_successful_check_in(member_id)
-        if existing_check_in:
-            current_credits = int(member["credits"])
-            self.log_attendance(
-                member_id=member_id,
-                scan_token=member["qr_token"],
-                status="already_scanned",
-                credits_before=current_credits,
-                credits_after=current_credits,
-                notes="Already scanned today. No credit deducted.",
-            )
-            return True, member, "Already scanned today. No credit deducted."
-
         credits_before = int(member["credits"])
-        if credits_before <= 0:
-            self.log_attendance(
-                member_id=member_id,
-                scan_token=member["qr_token"],
-                status="denied",
-                credits_before=credits_before,
-                credits_after=credits_before,
-                notes="No remaining credits.",
-            )
-            return False, member, "No remaining credits."
-
-        sql = "UPDATE members SET credits = credits - 1 WHERE id = ?"
-        if self.engine == "mysql":
-            sql = sql.replace("?", "%s")
 
         with self.connect() as connection:
             cursor = connection.cursor()
-            cursor.execute(sql, (member_id,))
+            update_sql = """
+            UPDATE members
+            SET credits = credits - 1, last_paid_scan_date = ?
+            WHERE id = ?
+              AND credits > 0
+              AND (last_paid_scan_date IS NULL OR last_paid_scan_date <> ?)
+            """
+            update_params = (today, member_id, today)
+            if self.engine == "mysql":
+                update_sql = update_sql.replace("?", "%s")
 
-        updated = self.get_member_by_id(member_id)
-        self.log_attendance(
-            member_id=member_id,
-            scan_token=member["qr_token"],
-            status="approved",
-            credits_before=credits_before,
-            credits_after=int(updated["credits"]),
-            notes="Entry approved.",
+            cursor.execute(update_sql, update_params)
+            changed_rows = cursor.rowcount
+
+            fetch_sql = "SELECT * FROM members WHERE id = ?"
+            if self.engine == "mysql":
+                fetch_sql = fetch_sql.replace("?", "%s")
+            cursor.execute(fetch_sql, (member_id,))
+            current = dict(cursor.fetchone())
+
+            if changed_rows == 1:
+                self._log_attendance_with_connection(
+                    connection=connection,
+                    member_id=member_id,
+                    scan_token=current["qr_token"],
+                    status="approved",
+                    credits_before=credits_before,
+                    credits_after=int(current["credits"]),
+                    notes="Credit deducted successfully.",
+                )
+                return True, current, "Credit deducted successfully."
+
+            current_credits = int(current["credits"])
+            if current.get("last_paid_scan_date") == today:
+                self._log_attendance_with_connection(
+                    connection=connection,
+                    member_id=member_id,
+                    scan_token=current["qr_token"],
+                    status="already_scanned",
+                    credits_before=current_credits,
+                    credits_after=current_credits,
+                    notes="Already scanned today. No credit deducted.",
+                )
+                return True, current, "Already scanned today. No credit deducted."
+
+            self._log_attendance_with_connection(
+                connection=connection,
+                member_id=member_id,
+                scan_token=current["qr_token"],
+                status="denied",
+                credits_before=current_credits,
+                credits_after=current_credits,
+                notes="No remaining credits.",
+            )
+            return False, current, "No remaining credits."
+
+    def _log_attendance_with_connection(
+        self,
+        connection,
+        member_id: int | None,
+        scan_token: str,
+        status: str,
+        credits_before: int,
+        credits_after: int,
+        notes: str,
+    ) -> None:
+        now = datetime.now().isoformat(timespec="seconds")
+        sql = """
+        INSERT INTO attendance_logs (
+            member_id, scan_token, status, credits_before, credits_after, notes, created_at
         )
-        return True, updated, "Entry approved."
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            member_id,
+            scan_token,
+            status,
+            credits_before,
+            credits_after,
+            notes,
+            now,
+        )
+        if self.engine == "mysql":
+            sql = sql.replace("?", "%s")
+
+        cursor = connection.cursor()
+        cursor.execute(sql, params)
 
     def get_dashboard_stats(self) -> dict:
         day_prefix = datetime.now().strftime("%Y-%m-%d")
