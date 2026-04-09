@@ -17,6 +17,7 @@ class Database:
     @contextmanager
     def connect(self) -> Iterator:
         if self.engine == "mysql":
+            self._ensure_mysql_database()
             try:
                 import pymysql
             except ImportError as exc:
@@ -47,6 +48,9 @@ class Database:
             connection.close()
 
     def _initialize_database(self) -> None:
+        if self.engine == "mysql":
+            self._ensure_mysql_database()
+
         if self.engine == "mysql":
             members_sql = """
             CREATE TABLE IF NOT EXISTS members (
@@ -104,6 +108,31 @@ class Database:
             cursor = connection.cursor()
             cursor.execute(members_sql)
             cursor.execute(attendance_sql)
+
+    def _ensure_mysql_database(self) -> None:
+        try:
+            import pymysql
+        except ImportError as exc:
+            raise RuntimeError(
+                "MySQL support requires the 'pymysql' package. Install dependencies first."
+            ) from exc
+
+        connection = pymysql.connect(
+            host=self.config.get("host", "127.0.0.1"),
+            port=int(self.config.get("port", 3306)),
+            user=self.config.get("user", "root"),
+            password=self.config.get("password", ""),
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True,
+        )
+
+        try:
+            cursor = connection.cursor()
+            database_name = self.config.get("database", "gym_qr_system")
+            safe_database_name = database_name.replace("`", "``")
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{safe_database_name}`")
+        finally:
+            connection.close()
 
     def create_member(
         self,
