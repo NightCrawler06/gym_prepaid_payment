@@ -7,3 +7,8 @@ db_config.json
 xampp_api/config.php
 mobile_app/node_modules/
 mobile_app/.expo/
+mobile_app_mvp/node_modules/
+mobile_app_mvp/.expo/
+GymQRCreditSystem.spec
+build/
+dist/
