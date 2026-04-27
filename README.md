@@ -22,7 +22,7 @@ Database file:
 
 `data/gym_system.db`
 
-## Optional MySQL/phpMyAdmin setup
+## Optional XAMPP MySQL setup
 
 If you want to use a local MySQL database managed through phpMyAdmin, create a `db_config.json` file in the project root:
 
@@ -67,6 +67,8 @@ The app uses Gmail SMTP by default:
 ```text
 smtp.gmail.com:587
 ```
+
+For the phone app, use the PHP API in [xampp_api](C:\Users\USER\Documents\Playground\xampp_api) so the mobile app can use the same XAMPP MySQL database.
 
 ## Install
 

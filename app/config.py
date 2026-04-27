@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import sys
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 QR_DIR = DATA_DIR / "qrcodes"
 SQLITE_DB_PATH = DATA_DIR / "gym_system.db"
