@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime
 
@@ -14,6 +15,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -28,6 +30,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .database import Database
+from .mailer import send_member_qr_email
 from .qr_utils import decode_qr_from_frame, generate_member_qr
 
 
@@ -42,6 +45,7 @@ class MainWindow(QMainWindow):
         self.last_scanned_token: str | None = None
         self.scan_cooldown_ticks = 0
         self.last_scan_summary = "Scanner ready."
+        self.last_registered_member: dict | None = None
 
         self.setWindowTitle("Gym QR Credit System")
         self.resize(1380, 860)
@@ -146,12 +150,16 @@ class MainWindow(QMainWindow):
 
         self.register_button = QPushButton("Register Member")
         self.register_button.clicked.connect(self.register_member)
+        self.email_qr_button = QPushButton("Email QR to Member")
+        self.email_qr_button.clicked.connect(self.email_latest_qr)
+        self.email_qr_button.setEnabled(False)
 
         form_layout.addRow("Full Name", self.name_input)
         form_layout.addRow("Phone", self.phone_input)
         form_layout.addRow("Email", self.email_input)
         form_layout.addRow("Initial Credits", self.initial_credits_input)
         form_layout.addRow(self.register_button)
+        form_layout.addRow(self.email_qr_button)
 
         preview_box = QGroupBox("Generated QR")
         preview_layout = QVBoxLayout(preview_box)
@@ -481,12 +489,14 @@ class MainWindow(QMainWindow):
         self.clock_label.setText(f"Desk Time\n{now}")
 
     def refresh_dashboard(self) -> None:
+        self._show_loading("Loading dashboard...")
         stats = self.db.get_dashboard_stats()
         self.total_members_card.value_label.setText(str(stats["total_members"]))
         self.total_credits_card.value_label.setText(str(stats["total_credits"]))
         self.today_entries_card.value_label.setText(str(stats["today_entries"]))
         self.low_credit_card.value_label.setText(str(stats["low_credit_members"]))
         self._update_clock()
+        self._show_ready()
 
     def register_member(self) -> None:
         full_name = self.name_input.text().strip()
@@ -510,6 +520,13 @@ class MainWindow(QMainWindow):
 
         self._show_qr_preview(qr_path)
         self.qr_path_label.setText(f"Saved QR: {qr_path}\nMember ID: {member_id}\nToken: {token}")
+        self.last_registered_member = {
+            "full_name": full_name,
+            "email": email,
+            "qr_path": qr_path,
+            "token": token,
+        }
+        self.email_qr_button.setEnabled(True)
 
         self.name_input.clear()
         self.phone_input.clear()
@@ -519,6 +536,31 @@ class MainWindow(QMainWindow):
         self.refresh_dashboard()
         self.refresh_members_table()
         QMessageBox.information(self, "Success", "Member registered and QR generated successfully.")
+
+    def email_latest_qr(self) -> None:
+        if not self.last_registered_member:
+            QMessageBox.warning(self, "No QR", "Register a member first.")
+            return
+
+        email = self.last_registered_member["email"]
+        if not email:
+            QMessageBox.warning(self, "Missing Email", "This member has no email address.")
+            return
+
+        self._show_loading("Sending QR email...")
+        QApplication.processEvents()
+        ok, message = send_member_qr_email(
+            recipient_email=email,
+            member_name=self.last_registered_member["full_name"],
+            qr_image_path=self.last_registered_member["qr_path"],
+            qr_token=self.last_registered_member["token"],
+        )
+        self._show_ready()
+
+        if ok:
+            QMessageBox.information(self, "Email Sent", message)
+        else:
+            QMessageBox.warning(self, "Email Not Sent", message)
 
     def _show_qr_preview(self, qr_path: str) -> None:
         pixmap = QPixmap(qr_path)
@@ -532,6 +574,7 @@ class MainWindow(QMainWindow):
         self.qr_preview_label.setText("")
 
     def refresh_members_table(self) -> None:
+        self._show_loading("Loading members...")
         members = self.db.get_members()
         self.members_table.setRowCount(len(members))
 
@@ -552,6 +595,7 @@ class MainWindow(QMainWindow):
                     item.setForeground(QColor("#c1121f"))
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self.members_table.setItem(row_index, column_index, item)
+        self._show_ready()
 
     def on_member_selected(self, row: int, _: int) -> None:
         member_id_item = self.members_table.item(row, 0)
@@ -569,11 +613,32 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Selection", "Please select a member first.")
             return
 
+        if not self._confirm_top_up_access():
+            return
+
         amount = int(self.top_up_input.value())
         self.db.add_credits(self.selected_member_id, amount)
         self.refresh_dashboard()
         self.refresh_members_table()
         QMessageBox.information(self, "Success", f"{amount} credit(s) added successfully.")
+
+    def _confirm_top_up_access(self) -> bool:
+        admin_pin = os.getenv("GYM_ADMIN_PIN", "1234")
+        pin, ok = QInputDialog.getText(
+            self,
+            "Top Up Authorization",
+            "Enter admin PIN:",
+            QLineEdit.EchoMode.Password,
+        )
+
+        if not ok:
+            return False
+
+        if pin != admin_pin:
+            QMessageBox.warning(self, "Invalid PIN", "Credit top-up was not authorized.")
+            return False
+
+        return True
 
     def start_camera(self) -> None:
         if self.camera and self.camera.isOpened():
@@ -710,6 +775,7 @@ class MainWindow(QMainWindow):
             )
 
     def refresh_logs_table(self) -> None:
+        self._show_loading("Loading transactions...")
         logs = self.db.get_attendance_logs()
         self.logs_table.setRowCount(len(logs))
 
@@ -736,6 +802,14 @@ class MainWindow(QMainWindow):
                         item.setForeground(QColor("#9d0208"))
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self.logs_table.setItem(row_index, column_index, item)
+        self._show_ready()
+
+    def _show_loading(self, message: str) -> None:
+        self.statusBar().showMessage(message)
+        QApplication.processEvents()
+
+    def _show_ready(self) -> None:
+        self.statusBar().showMessage("Ready", 2500)
 
     def closeEvent(self, event) -> None:
         self.stop_camera()

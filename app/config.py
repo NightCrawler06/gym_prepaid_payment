@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 
@@ -9,6 +10,7 @@ DATA_DIR = BASE_DIR / "data"
 QR_DIR = DATA_DIR / "qrcodes"
 SQLITE_DB_PATH = DATA_DIR / "gym_system.db"
 DB_CONFIG_PATH = BASE_DIR / "db_config.json"
+ENV_PATH = BASE_DIR / ".env"
 
 
 def ensure_directories() -> None:
@@ -16,8 +18,27 @@ def ensure_directories() -> None:
     QR_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def load_env_file() -> None:
+    if not ENV_PATH.exists():
+        return
+
+    with ENV_PATH.open("r", encoding="utf-8") as file:
+        for raw_line in file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def load_db_config() -> dict:
     ensure_directories()
+    load_env_file()
 
     default_config = {
         "engine": "sqlite",

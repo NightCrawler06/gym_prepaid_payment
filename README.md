@@ -37,13 +37,36 @@ If you want to use a local MySQL database managed through phpMyAdmin, create a `
 }
 ```
 
-Then create the database in phpMyAdmin:
+The app will create the database and required tables automatically on startup.
 
-```sql
-CREATE DATABASE gym_qr_system;
+## Admin PIN for credit top-up
+
+Credit top-up requires an admin PIN. By default, the PIN is:
+
+```text
+1234
 ```
 
-The app will create the required tables automatically on startup.
+To change it, copy `.env.example` to `.env` and set:
+
+```text
+GYM_ADMIN_PIN=your-pin-here
+```
+
+## Gmail SMTP for QR email
+
+To email QR codes to members, add your Gmail address and Gmail app password in `.env`:
+
+```text
+GYM_SMTP_EMAIL=your-email@gmail.com
+GYM_SMTP_PASSWORD=your-gmail-app-password
+```
+
+The app uses Gmail SMTP by default:
+
+```text
+smtp.gmail.com:587
+```
 
 ## Install
 
