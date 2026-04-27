@@ -101,18 +101,30 @@ class MainWindow(QMainWindow):
         self._update_clock()
         return frame
 
-    def _build_stats_row(self) -> QHBoxLayout:
-        layout = QHBoxLayout()
+    def _build_stats_row(self) -> QVBoxLayout:
+        layout = QVBoxLayout()
         layout.setSpacing(12)
+        top_row = QHBoxLayout()
+        bottom_row = QHBoxLayout()
+        top_row.setSpacing(12)
+        bottom_row.setSpacing(12)
+
         self.total_members_card = self._create_stat_card("Total Members", "0")
         self.total_credits_card = self._create_stat_card("Total Credits", "0")
         self.today_entries_card = self._create_stat_card("Today's Paid Entries", "0")
         self.low_credit_card = self._create_stat_card("Low Credit Alerts", "0")
+        self.today_topups_card = self._create_stat_card("Today's Top-Ups", "0")
+        self.saved_reports_card = self._create_stat_card("Saved Daily Reports", "0")
 
-        layout.addWidget(self.total_members_card)
-        layout.addWidget(self.total_credits_card)
-        layout.addWidget(self.today_entries_card)
-        layout.addWidget(self.low_credit_card)
+        top_row.addWidget(self.total_members_card)
+        top_row.addWidget(self.total_credits_card)
+        top_row.addWidget(self.today_entries_card)
+        bottom_row.addWidget(self.low_credit_card)
+        bottom_row.addWidget(self.today_topups_card)
+        bottom_row.addWidget(self.saved_reports_card)
+
+        layout.addLayout(top_row)
+        layout.addLayout(bottom_row)
         return layout
 
     def _create_stat_card(self, title: str, value: str) -> QFrame:
@@ -496,6 +508,8 @@ class MainWindow(QMainWindow):
         self.total_credits_card.value_label.setText(str(stats["total_credits"]))
         self.today_entries_card.value_label.setText(str(stats["today_entries"]))
         self.low_credit_card.value_label.setText(str(stats["low_credit_members"]))
+        self.today_topups_card.value_label.setText(str(stats["today_topups"]))
+        self.saved_reports_card.value_label.setText(str(stats["saved_daily_reports"]))
         self._update_clock()
         self._show_ready()
 
