@@ -42,6 +42,8 @@ class MainWindow(QMainWindow):
         self.camera: cv2.VideoCapture | None = None
         self.camera_timer = QTimer(self)
         self.camera_timer.timeout.connect(self.update_camera_frame)
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.refresh_all_data)
         self.last_scanned_token: str | None = None
         self.scan_cooldown_ticks = 0
         self.last_scan_summary = "Scanner ready."
@@ -51,9 +53,8 @@ class MainWindow(QMainWindow):
         self.resize(1380, 860)
         self._build_ui()
         self._apply_styles()
-        self.refresh_dashboard()
-        self.refresh_members_table()
-        self.refresh_logs_table()
+        self.refresh_all_data()
+        self.refresh_timer.start(5000)
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -100,18 +101,30 @@ class MainWindow(QMainWindow):
         self._update_clock()
         return frame
 
-    def _build_stats_row(self) -> QHBoxLayout:
-        layout = QHBoxLayout()
+    def _build_stats_row(self) -> QVBoxLayout:
+        layout = QVBoxLayout()
         layout.setSpacing(12)
+        top_row = QHBoxLayout()
+        bottom_row = QHBoxLayout()
+        top_row.setSpacing(12)
+        bottom_row.setSpacing(12)
+
         self.total_members_card = self._create_stat_card("Total Members", "0")
         self.total_credits_card = self._create_stat_card("Total Credits", "0")
         self.today_entries_card = self._create_stat_card("Today's Paid Entries", "0")
         self.low_credit_card = self._create_stat_card("Low Credit Alerts", "0")
+        self.today_topups_card = self._create_stat_card("Today's Top-Ups", "0")
+        self.saved_reports_card = self._create_stat_card("Saved Daily Reports", "0")
 
-        layout.addWidget(self.total_members_card)
-        layout.addWidget(self.total_credits_card)
-        layout.addWidget(self.today_entries_card)
-        layout.addWidget(self.low_credit_card)
+        top_row.addWidget(self.total_members_card)
+        top_row.addWidget(self.total_credits_card)
+        top_row.addWidget(self.today_entries_card)
+        bottom_row.addWidget(self.low_credit_card)
+        bottom_row.addWidget(self.today_topups_card)
+        bottom_row.addWidget(self.saved_reports_card)
+
+        layout.addLayout(top_row)
+        layout.addLayout(bottom_row)
         return layout
 
     def _create_stat_card(self, title: str, value: str) -> QFrame:
@@ -495,8 +508,15 @@ class MainWindow(QMainWindow):
         self.total_credits_card.value_label.setText(str(stats["total_credits"]))
         self.today_entries_card.value_label.setText(str(stats["today_entries"]))
         self.low_credit_card.value_label.setText(str(stats["low_credit_members"]))
+        self.today_topups_card.value_label.setText(str(stats["today_topups"]))
+        self.saved_reports_card.value_label.setText(str(stats["saved_daily_reports"]))
         self._update_clock()
         self._show_ready()
+
+    def refresh_all_data(self) -> None:
+        self.refresh_dashboard()
+        self.refresh_members_table()
+        self.refresh_logs_table()
 
     def register_member(self) -> None:
         full_name = self.name_input.text().strip()
@@ -533,8 +553,7 @@ class MainWindow(QMainWindow):
         self.email_input.clear()
         self.initial_credits_input.setValue(5)
 
-        self.refresh_dashboard()
-        self.refresh_members_table()
+        self.refresh_all_data()
         QMessageBox.information(self, "Success", "Member registered and QR generated successfully.")
 
     def email_latest_qr(self) -> None:
@@ -618,8 +637,7 @@ class MainWindow(QMainWindow):
 
         amount = int(self.top_up_input.value())
         self.db.add_credits(self.selected_member_id, amount)
-        self.refresh_dashboard()
-        self.refresh_members_table()
+        self.refresh_all_data()
         QMessageBox.information(self, "Success", f"{amount} credit(s) added successfully.")
 
     def _confirm_top_up_access(self) -> bool:
@@ -738,15 +756,12 @@ class MainWindow(QMainWindow):
             )
             self.last_scan_summary = f"Unknown QR scanned at {datetime.now().strftime('%I:%M %p')}."
             self.last_scan_label.setText(f"Latest Event: {self.last_scan_summary}")
-            self.refresh_logs_table()
-            self.refresh_dashboard()
+            self.refresh_all_data()
             self._set_result_state("Access denied.\nUnknown member QR.", "#9d0208", "#fff1f1")
             return
 
         success, updated_member, message = self.db.consume_credit_for_check_in(member["id"])
-        self.refresh_dashboard()
-        self.refresh_members_table()
-        self.refresh_logs_table()
+        self.refresh_all_data()
 
         if success and updated_member:
             self.last_scan_summary = (
